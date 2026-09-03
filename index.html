@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>GABTEC Voice Recorder</title>
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background: #f3f5f7;
+      font-family: Arial, sans-serif;
+      color: #222;
+    }
+
+    .card {
+      width: min(92%, 520px);
+      background: white;
+      border-radius: 16px;
+      padding: 30px;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.12);
+      text-align: center;
+    }
+
+    h1 {
+      margin: 0 0 6px;
+      font-size: 30px;
+      letter-spacing: 1px;
+    }
+
+    .subtitle {
+      color: #666;
+      margin-bottom: 28px;
+    }
+
+    .status {
+      padding: 14px;
+      border-radius: 10px;
+      background: #f1f4f8;
+      margin-bottom: 20px;
+      font-weight: 600;
+    }
+
+    .timer {
+      font-size: 42px;
+      font-weight: bold;
+      margin: 20px 0;
+    }
+
+    button {
+      width: 100%;
+      border: none;
+      border-radius: 10px;
+      padding: 16px;
+      font-size: 17px;
+      font-weight: bold;
+      cursor: pointer;
+      margin-top: 10px;
+    }
+
+    #startBtn {
+      background: #2878e8;
+      color: white;
+    }
+
+    #stopBtn {
+      background: #d93025;
+      color: white;
+      display: none;
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    audio {
+      width: 100%;
+      margin-top: 20px;
+      display: none;
+    }
+
+    .result {
+      margin-top: 20px;
+      text-align: left;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 130px;
+      resize: vertical;
+      padding: 12px;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      font-family: Arial, sans-serif;
+      font-size: 15px;
+    }
+
+    .error {
+      color: #d93025;
+      margin-top: 15px;
+      font-weight: 600;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="card">
+
+    <h1>GABTEC</h1>
+    <div class="subtitle">Voice Recorder Test</div>
+
+    <div id="status" class="status">
+      Ready to record
+    </div>
+
+    <div id="timer" class="timer">
+      00:00
+    </div>
+
+    <button id="startBtn">
+      🎙️ START SPEAKING
+    </button>
+
+    <button id="stopBtn">
+      ⏹ STOP RECORDING
+    </button>
+
+    <audio id="audioPlayer" controls></audio>
+
+    <div class="result">
+      <label><strong>Recording status</strong></label>
+      <textarea id="resultText" readonly></textarea>
+    </div>
+
+    <div id="error" class="error"></div>
+
+  </div>
+
+<script>
+
+let mediaRecorder = null;
+let audioChunks = [];
+let recordingSeconds = 0;
+let timerInterval = null;
+
+const startBtn = document.getElementById("startBtn");
+const stopBtn = document.getElementById("stopBtn");
+const statusBox = document.getElementById("status");
+const timerBox = document.getElementById("timer");
+const audioPlayer = document.getElementById("audioPlayer");
+const resultText = document.getElementById("resultText");
+const errorBox = document.getElementById("error");
+
+
+function updateTimer() {
+
+  const minutes = Math.floor(recordingSeconds / 60);
+  const seconds = recordingSeconds % 60;
+
+  timerBox.textContent =
+    String(minutes).padStart(2, "0") +
+    ":" +
+    String(seconds).padStart(2, "0");
+}
+
+
+function startTimer() {
+
+  recordingSeconds = 0;
+  updateTimer();
+
+  timerInterval = setInterval(function() {
+
+    recordingSeconds++;
+    updateTimer();
+
+  }, 1000);
+}
+
+
+function stopTimer() {
+
+  if (timerInterval) {
+    clearInterval(timerInterval);
+    timerInterval = null;
+  }
+}
+
+
+startBtn.addEventListener("click", async function() {
+
+  errorBox.textContent = "";
+  resultText.value = "";
+
+  try {
+
+    /*
+      THIS IS THE IMPORTANT PART.
+
+      The browser will request microphone permission
+      for this normal HTTPS webpage.
+    */
+
+    const stream =
+      await navigator.mediaDevices.getUserMedia({
+        audio: true
+      });
+
+    audioChunks = [];
+
+    mediaRecorder = new MediaRecorder(stream);
+
+    mediaRecorder.ondataavailable = function(event) {
+
+      if (event.data && event.data.size > 0) {
+        audioChunks.push(event.data);
+      }
+
+    };
+
+    mediaRecorder.onstart = function() {
+
+      statusBox.textContent = "🔴 Recording...";
+      startBtn.style.display = "none";
+      stopBtn.style.display = "block";
+
+      resultText.value =
+        "Microphone access successful. Recording is active.";
+
+      startTimer();
+    };
+
+
+    mediaRecorder.onstop = function() {
+
+      stopTimer();
+
+      stream.getTracks().forEach(function(track) {
+        track.stop();
+      });
+
+      const audioBlob = new Blob(
+        audioChunks,
+        {
+          type: mediaRecorder.mimeType || "audio/webm"
+        }
+      );
+
+      const audioURL = URL.createObjectURL(audioBlob);
+
+      audioPlayer.src = audioURL;
+      audioPlayer.style.display = "block";
+
+      statusBox.textContent =
+        "Recording completed successfully.";
+
+      resultText.value =
+        "Microphone test successful.\n\n" +
+        "Your recording has been captured.";
+
+      startBtn.style.display = "block";
+      stopBtn.style.display = "none";
+    };
+
+
+    mediaRecorder.start();
+
+  } catch (error) {
+
+    console.error(error);
+
+    stopTimer();
+
+    statusBox.textContent =
+      "❌ Microphone could not be started.";
+
+    errorBox.textContent =
+      "Microphone error: " +
+      error.name +
+      " — " +
+      error.message;
+
+    resultText.value =
+      "Microphone access failed.";
+
+    startBtn.style.display = "block";
+    stopBtn.style.display = "none";
+  }
+
+});
+
+
+stopBtn.addEventListener("click", function() {
+
+  if (mediaRecorder && mediaRecorder.state !== "inactive") {
+    mediaRecorder.stop();
+  }
+
+});
+
+</script>
+
+</body>
+</html>
